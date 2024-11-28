@@ -1,0 +1,23 @@
+# .github/workflows/download-artifact.yml
+name: Download Artifact with Version
+
+on:
+  workflow_dispatch: # Allows manual triggering with inputs
+    inputs:
+      version:
+        description: "Semantic version of the artifact to download (e.g., 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: my-artifact-${{ github.event.inputs.version }} # Use the version input in the artifact name
+
+      - name: List downloaded files
+        run: ls -R
