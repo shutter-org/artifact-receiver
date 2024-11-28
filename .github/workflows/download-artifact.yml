@@ -1,8 +1,7 @@
-# .github/workflows/download-artifact.yml
 name: Download Artifact with Version
 
 on:
-  workflow_dispatch: # Allows manual triggering with inputs
+  workflow_dispatch:
     inputs:
       version:
         description: "Semantic version of the artifact to download (e.g., 1.0.0)"
@@ -14,10 +13,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set variables
+        run: echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+
+      - name: Fetch artifact details
+        run: |
+          REPO="shutter-org/artifact-giver"  # Public uploading repo
+          curl -s "https://api.github.com/repos/$REPO/actions/artifacts" > artifacts.json
+          cat artifacts.json | jq -r ".artifacts[] | select(.name==\"my-artifact-${VERSION}\") | .archive_download_url" > artifact-url.txt
+          if [ ! -s artifact-url.txt ]; then
+            echo "Error: Artifact my-artifact-${VERSION} not found." >&2
+            exit 1
+          fi
+
       - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: my-artifact-${{ github.event.inputs.version }} # Use the version input in the artifact name
+        run: |
+          URL=$(cat artifact-url.txt)
+          curl -sL "$URL" --output artifact.zip
+          unzip artifact.zip -d artifact
 
       - name: List downloaded files
-        run: ls -R
+        run: ls -R artifact
