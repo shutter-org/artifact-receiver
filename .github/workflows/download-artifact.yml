@@ -1,36 +1,37 @@
-name: Download Artifact with Version
+name: Download Artifact
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Semantic version of the artifact to download (e.g., 1.0.0)"
-        required: true
-        default: "1.0.0"
+  push:
+    branches:
+      - main
 
 jobs:
-  download:
+  download-artifact:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set variables
-        run: echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Fetch artifact details
-        run: |
-          REPO="shutter-org/artifact-giver"  # Public uploading repo
-          curl -s "https://api.github.com/repos/$REPO/actions/artifacts" > artifacts.json
-          cat artifacts.json | jq -r ".artifacts[] | select(.name==\"my-artifact-${VERSION}\") | .archive_download_url" > artifact-url.txt
-          if [ ! -s artifact-url.txt ]; then
-            echo "Error: Artifact my-artifact-${VERSION} not found." >&2
-            exit 1
-          fi
+      - name: Install GitHub CLI
+        run: sudo apt-get install gh
 
-      - name: Download artifact
+      - name: Authenticate GitHub CLI
+        run: gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Get artifact ID
+        id: get_artifact_id
         run: |
-          URL=$(cat artifact-url.txt)
-          curl -sL "$URL" --output artifact.zip
-          unzip artifact.zip -d artifact
+          ARTIFACT_ID=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+          /repos/shutter-org/artifact-giver/actions/artifacts | jq -r '.artifacts[] | select(.name == "my-artifact-1.0.0") | .id')
+          echo "Artifact ID: $ARTIFACT_ID"
+          echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_ENV
+
+      - name: Download the artifact
+        run: |
+          gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+          /repos/shutter-org/artifact-giver/actions/artifacts/${{ env.artifact_id }}/download \
+          --output my-artifact-1.0.0.zip
 
       - name: List downloaded files
-        run: ls -R artifact
+        run: ls -lh my-artifact-1.0.0.zip
