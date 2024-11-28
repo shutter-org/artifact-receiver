@@ -1,9 +1,12 @@
 name: Download Artifact
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch: # Allows manual triggering with inputs
+    inputs:
+      version:
+        description: "Semantic version of the artifact (e.g., 1.0.0)"
+        required: true
+        default: "1.0.0"
 
 jobs:
   download-artifact:
@@ -19,19 +22,35 @@ jobs:
       - name: Authenticate GitHub CLI
         run: gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Get artifact ID
+      - name: Get artifact ID for version ${{ github.event.inputs.version }}
         id: get_artifact_id
         run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Searching for artifact with version: $VERSION"
+
+          # Fetch artifact info using GitHub CLI and filter by the provided version
           ARTIFACT_ID=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
-          /repos/shutter-org/artifact-giver/actions/artifacts | jq -r '.artifacts[] | select(.name == "my-artifact-1.0.0") | .id')
+          /repos/shutter-org/artifact-giver/actions/artifacts | jq -r --arg VERSION "$VERSION" \
+          '.artifacts[] | select(.name == ("my-artifact-" + $VERSION)) | .id')
+
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "Artifact with version $VERSION not found."
+            exit 1
+          fi
+
           echo "Artifact ID: $ARTIFACT_ID"
           echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_ENV
 
       - name: Download the artifact
         run: |
-          gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
-          /repos/shutter-org/artifact-giver/actions/artifacts/${{ env.artifact_id }}/download \
-          --output my-artifact-1.0.0.zip
+          if [ -z "${{ env.artifact_id }}" ]; then
+            echo "No artifact ID found. Aborting."
+            exit 1
+          fi
+
+          # Download the artifact using the ID
+          DOWNLOAD_URL="https://api.github.com/repos/shutter-org/artifact-giver/actions/artifacts/${{ env.artifact_id }}/zip"
+          curl -L -o "my-artifact-${{ github.event.inputs.version }}.zip" $DOWNLOAD_URL
 
       - name: List downloaded files
-        run: ls -lh my-artifact-1.0.0.zip
+        run: ls -lh "my-artifact-${{ github.event.inputs.version }}.zip"
